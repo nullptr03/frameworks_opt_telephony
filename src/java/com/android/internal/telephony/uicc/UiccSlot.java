@@ -207,9 +207,15 @@ public class UiccSlot extends Handler {
                 if (!iss.mSimPortInfos[i].mPortActive) {
                     // TODO: (b/79432584) evaluate whether should broadcast card state change
                     // even if it's inactive.
-                    UiccController.getInstance().updateSimStateForInactivePort(
-                            mPortIdxToPhoneId.getOrDefault(i, INVALID_PHONE_ID),
-                            iss.mSimPortInfos[i].mIccId);
+                    if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+                        UiccController.getInstance().updateSimStateForInactivePort(
+                                mPortIdxToPhoneId.getOrDefault(i, INVALID_PHONE_ID),
+                                iss.mSimPortInfos[i].mIccId);
+                    } else {
+                        UiccController.updateInternalIccStateForInactivePort(mContext,
+                                mPortIdxToPhoneId.getOrDefault(i, INVALID_PHONE_ID),
+                                iss.mSimPortInfos[i].mIccId);
+                    }
                     mLastRadioState.put(i, TelephonyManager.RADIO_POWER_UNAVAILABLE);
                     if (mUiccCard != null) {
                         // Dispose the port
@@ -358,7 +364,13 @@ public class UiccSlot extends Handler {
             sendMessage(obtainMessage(EVENT_CARD_REMOVED, null));
         }
 
-        UiccController.getInstance().updateSimState(phoneId, IccCardConstants.State.ABSENT, null);
+        if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+            UiccController.getInstance().updateSimState(phoneId, IccCardConstants.State.ABSENT,
+                    null);
+        } else {
+            UiccController.updateInternalIccState(mContext, IccCardConstants.State.ABSENT,
+                    null, phoneId);
+        }
         // no card present in the slot now; dispose port and then card if needed.
         disposeUiccCardIfNeeded(false /* sim state is not unknown */, portIndex);
         // If SLOT_STATUS is the last event, wrong subscription is getting invalidate during
@@ -636,8 +648,13 @@ public class UiccSlot extends Handler {
         disposeUiccCardIfNeeded(true /* sim state is unknown */, portIndex);
 
         if (phoneId != INVALID_PHONE_ID) {
-            UiccController.getInstance().updateSimState(phoneId,
-                    IccCardConstants.State.UNKNOWN, null);
+            if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+                UiccController.getInstance().updateSimState(phoneId,
+                        IccCardConstants.State.UNKNOWN, null);
+            } else {
+                UiccController.updateInternalIccState(
+                        mContext, IccCardConstants.State.UNKNOWN, null, phoneId);
+            }
         }
         mLastRadioState.put(portIndex, TelephonyManager.RADIO_POWER_UNAVAILABLE);
         // Reset CardState

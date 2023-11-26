@@ -434,6 +434,10 @@ public class TelephonyComponentFactory {
                 telephonyComponentFactory);
     }
 
+    public SubscriptionController initSubscriptionController(Context c) {
+        return SubscriptionController.init(c);
+    }
+
     public PhoneSwitcher makePhoneSwitcher(int maxDataAttachModemCount, Context context,
             Looper looper) {
         return PhoneSwitcher.make(maxDataAttachModemCount, context, looper);
@@ -446,14 +450,9 @@ public class TelephonyComponentFactory {
         return new DisplayInfoController(phone);
     }
 
-    /**
-     * Initialize multi sim settings controller.
-     *
-     * @param c The context.
-     * @return The multi sim settings controller instance.
-     */
-    public MultiSimSettingController initMultiSimSettingController(Context c) {
-        return MultiSimSettingController.init(c);
+    public MultiSimSettingController initMultiSimSettingController(Context c,
+            SubscriptionController sc) {
+        return MultiSimSettingController.init(c, sc);
     }
 
     /**
@@ -461,6 +460,11 @@ public class TelephonyComponentFactory {
      */
     public SignalStrengthController makeSignalStrengthController(GsmCdmaPhone phone) {
         return new SignalStrengthController(phone);
+    }
+
+    public SubscriptionInfoUpdater makeSubscriptionInfoUpdater(Looper looper, Context context,
+            SubscriptionController sc) {
+        return new SubscriptionInfoUpdater(looper, context, sc);
     }
 
     /**

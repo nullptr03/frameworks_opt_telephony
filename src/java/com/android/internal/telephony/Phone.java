@@ -42,6 +42,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.WorkSource;
 import android.preference.PreferenceManager;
+import android.provider.DeviceConfig;
 import android.sysprop.TelephonyProperties;
 import android.telecom.VideoProfile;
 import android.telephony.AccessNetworkConstants;
@@ -380,6 +381,12 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
     private int mUsageSettingFromModem = SubscriptionManager.USAGE_SETTING_UNKNOWN;
     private boolean mIsUsageSettingSupported = true;
 
+    /**
+     * {@code true} if the new SubscriptionManagerService is enabled, otherwise the old
+     * SubscriptionController is used.
+     */
+    private boolean mIsSubscriptionManagerServiceEnabled = false;
+
     //IMS
     /**
      * {@link CallStateException} message text used to indicate that an IMS call has failed because
@@ -624,7 +631,14 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
         // Initialize SMS stats
         mSmsStats = new SmsStats(this);
 
-        mSubscriptionManagerService = SubscriptionManagerService.getInstance();
+        // This is a temp flag which will be removed before U AOSP public release.
+        mIsSubscriptionManagerServiceEnabled = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_using_subscription_manager_service)
+                || DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_TELEPHONY,
+                "enable_subscription_manager_service", false);
+        if (isSubscriptionManagerServiceEnabled()) {
+            mSubscriptionManagerService = SubscriptionManagerService.getInstance();
+        }
         m2gAdminUpdater = new TelephonyAdminReceiver(context, this);
 
         if (getPhoneType() == PhoneConstants.PHONE_TYPE_IMS) {
@@ -2397,10 +2411,21 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      */
     public void loadAllowedNetworksFromSubscriptionDatabase() {
         String result = null;
-        SubscriptionInfoInternal subInfo = mSubscriptionManagerService
-                .getSubscriptionInfoInternal(getSubId());
-        if (subInfo != null) {
-            result = subInfo.getAllowedNetworkTypesForReasons();
+        if (isSubscriptionManagerServiceEnabled()) {
+            SubscriptionInfoInternal subInfo = mSubscriptionManagerService
+                    .getSubscriptionInfoInternal(getSubId());
+            if (subInfo != null) {
+                result = subInfo.getAllowedNetworkTypesForReasons();
+            }
+        } else {
+            // Try to load ALLOWED_NETWORK_TYPES from SIMINFO.
+            if (SubscriptionController.getInstance() == null) {
+                return;
+            }
+
+            result = SubscriptionController.getInstance().getSubscriptionProperty(
+                    getSubId(),
+                    SubscriptionManager.ALLOWED_NETWORK_TYPES);
         }
 
         // After fw load network type from DB, do unlock if subId is valid.
@@ -4095,7 +4120,17 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      */
     @UnsupportedAppUsage
     public int getSubId() {
-        return mSubscriptionManagerService.getSubId(mPhoneId);
+        if (isSubscriptionManagerServiceEnabled()) {
+            return mSubscriptionManagerService.getSubId(mPhoneId);
+        }
+        if (SubscriptionController.getInstance() == null) {
+            // TODO b/78359408 getInstance sometimes returns null in Treehugger tests, which causes
+            // flakiness. Even though we haven't seen this crash in the wild we should keep this
+            // check in until we've figured out the root cause.
+            Rlog.e(LOG_TAG, "SubscriptionController.getInstance = null! Returning default subId");
+            return SubscriptionManager.DEFAULT_SUBSCRIPTION_ID;
+        }
+        return SubscriptionController.getInstance().getSubId(mPhoneId);
     }
 
     /**
@@ -4411,10 +4446,14 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
 
     private int getResolvedUsageSetting(int subId) {
         SubscriptionInfo subInfo = null;
-        SubscriptionInfoInternal subInfoInternal = mSubscriptionManagerService
-                .getSubscriptionInfoInternal(subId);
-        if (subInfoInternal != null) {
-            subInfo = subInfoInternal.toSubscriptionInfo();
+        if (isSubscriptionManagerServiceEnabled()) {
+            SubscriptionInfoInternal subInfoInternal = mSubscriptionManagerService
+                    .getSubscriptionInfoInternal(subId);
+            if (subInfoInternal != null) {
+                subInfo = subInfoInternal.toSubscriptionInfo();
+            }
+        } else {
+            subInfo = SubscriptionController.getInstance().getSubscriptionInfo(subId);
         }
 
         if (subInfo == null
@@ -5111,6 +5150,14 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      */
     public @Nullable TelephonyTester getTelephonyTester() {
         return mTelephonyTester;
+    }
+
+    /**
+     * @return {@code true} if the new {@link SubscriptionManagerService} is enabled, otherwise the
+     * old {@link SubscriptionController} is used.
+     */
+    public boolean isSubscriptionManagerServiceEnabled() {
+        return mIsSubscriptionManagerServiceEnabled;
     }
 
     /**

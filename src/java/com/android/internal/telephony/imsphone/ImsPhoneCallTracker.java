@@ -144,6 +144,7 @@ import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.ServiceStateTracker;
 import com.android.internal.telephony.SrvccConnection;
+import com.android.internal.telephony.SubscriptionController;
 import com.android.internal.telephony.d2d.RtpTransport;
 import com.android.internal.telephony.data.DataSettingsManager;
 import com.android.internal.telephony.domainselection.DomainSelectionResolver;
@@ -1867,12 +1868,20 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
         // Check for changes due to carrier config.
         maybeConfigureRtpHeaderExtensions();
 
-        SubscriptionInfoInternal subInfo = SubscriptionManagerService.getInstance()
-                .getSubscriptionInfoInternal(subId);
-        if (subInfo == null || !subInfo.isActive()) {
-            loge("updateCarrierConfiguration: skipping notification to ImsService, non"
-                    + "active subId = " + subId);
-            return;
+        if (mPhone.isSubscriptionManagerServiceEnabled()) {
+            SubscriptionInfoInternal subInfo = SubscriptionManagerService.getInstance()
+                    .getSubscriptionInfoInternal(subId);
+            if (subInfo == null || !subInfo.isActive()) {
+                loge("updateCarrierConfiguration: skipping notification to ImsService, non"
+                        + "active subId = " + subId);
+                return;
+            }
+        } else {
+            if (!SubscriptionController.getInstance().isActiveSubId(subId)) {
+                loge("updateCarrierConfiguration: skipping notification to ImsService, non"
+                        + "active subId = " + subId);
+                return;
+            }
         }
 
         Phone defaultPhone = getPhone().getDefaultPhone();

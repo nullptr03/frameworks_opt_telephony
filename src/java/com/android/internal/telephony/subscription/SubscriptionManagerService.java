@@ -90,6 +90,7 @@ import com.android.internal.telephony.MultiSimSettingController;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.RILConstants;
+import com.android.internal.telephony.SubscriptionController;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.telephony.TelephonyPermissions;
 import com.android.internal.telephony.data.PhoneSwitcher;
@@ -547,6 +548,7 @@ public class SubscriptionManagerService extends ISub.Stub {
         });
 
         SubscriptionManager.invalidateSubscriptionManagerServiceCaches();
+        SubscriptionManager.invalidateSubscriptionManagerServiceEnabledCaches();
 
         mContext.registerReceiver(new BroadcastReceiver() {
             @Override
@@ -1952,6 +1954,7 @@ public class SubscriptionManagerService extends ISub.Stub {
      * @see SubscriptionManager#requestEmbeddedSubscriptionInfoListRefresh
      */
     @Override
+    // TODO: Remove this after SubscriptionController is removed.
     public void requestEmbeddedSubscriptionInfoListRefresh(int cardId) {
         updateEmbeddedSubscriptions(List.of(cardId), null);
     }
@@ -2020,14 +2023,15 @@ public class SubscriptionManagerService extends ISub.Stub {
      * subscription type.
      * @param subscriptionType the type of subscription to be removed.
      *
-     * @return {@code true} if succeeded, otherwise {@code false}.
+     * // TODO: Remove this terrible return value once SubscriptionController is removed.
+     * @return 0 if success, < 0 on error.
      *
      * @throws NullPointerException if {@code uniqueId} is {@code null}.
      * @throws SecurityException if callers do not hold the required permission.
      */
     @Override
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
-    public boolean removeSubInfo(@NonNull String uniqueId, int subscriptionType) {
+    public int removeSubInfo(@NonNull String uniqueId, int subscriptionType) {
         enforcePermissions("removeSubInfo", Manifest.permission.MODIFY_PHONE_STATE);
 
         logl("removeSubInfo: uniqueId=" + SubscriptionInfo.getPrintableId(uniqueId) + ", "
@@ -2039,15 +2043,15 @@ public class SubscriptionManagerService extends ISub.Stub {
                     .getSubscriptionInfoInternalByIccId(uniqueId);
             if (subInfo == null) {
                 loge("Cannot find subscription with uniqueId " + uniqueId);
-                return false;
+                return -1;
             }
             if (subInfo.getSubscriptionType() != subscriptionType) {
                 loge("The subscription type does not match.");
-                return false;
+                return -1;
             }
             mSlotIndexToSubId.remove(subInfo.getSimSlotIndex());
             mSubscriptionDatabaseManager.removeSubscriptionInfo(subInfo.getSubscriptionId());
-            return true;
+            return 0;
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -2934,6 +2938,9 @@ public class SubscriptionManagerService extends ISub.Stub {
      * @param columnName Column name in the database. Note not all fields are supported.
      * @param value Value to store in the database.
      *
+     * // TODO: Remove return value after SubscriptionController is deleted.
+     * @return always 1
+     *
      * @throws IllegalArgumentException if {@code subscriptionId} is invalid, or the field is not
      * exposed.
      * @throws SecurityException if callers do not hold the required permission.
@@ -2943,7 +2950,7 @@ public class SubscriptionManagerService extends ISub.Stub {
      */
     @Override
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
-    public void setSubscriptionProperty(int subId, @NonNull String columnName,
+    public int setSubscriptionProperty(int subId, @NonNull String columnName,
             @NonNull String value) {
         enforcePermissions("setSubscriptionProperty", Manifest.permission.MODIFY_PHONE_STATE);
 
@@ -2964,6 +2971,7 @@ public class SubscriptionManagerService extends ISub.Stub {
             }
 
             mSubscriptionDatabaseManager.setSubscriptionProperty(subId, columnName, value);
+            return 1;
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -3680,6 +3688,16 @@ public class SubscriptionManagerService extends ISub.Stub {
         } finally {
             Binder.restoreCallingIdentity(token);
         }
+    }
+
+    /**
+     * @return {@code true} if using {@link SubscriptionManagerService} instead of
+     * {@link SubscriptionController}.
+     */
+    //TODO: Removed before U AOSP public release.
+    @Override
+    public boolean isSubscriptionManagerServiceEnabled() {
+        return true;
     }
 
     /**

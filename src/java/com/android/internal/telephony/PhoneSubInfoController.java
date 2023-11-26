@@ -159,8 +159,13 @@ public class PhoneSubInfoController extends IPhoneSubInfo.Stub {
         long identity = Binder.clearCallingIdentity();
         boolean isActive;
         try {
-            isActive = SubscriptionManagerService.getInstance().isActiveSubId(subId,
-                    callingPackage, callingFeatureId);
+            if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+                isActive = SubscriptionManagerService.getInstance().isActiveSubId(subId,
+                        callingPackage, callingFeatureId);
+            } else {
+                isActive = SubscriptionController.getInstance().isActiveSubId(subId, callingPackage,
+                        callingFeatureId);
+            }
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -174,12 +179,15 @@ public class PhoneSubInfoController extends IPhoneSubInfo.Stub {
             }
             identity = Binder.clearCallingIdentity();
             try {
-                SubscriptionInfoInternal subInfo = SubscriptionManagerService.getInstance()
-                        .getSubscriptionInfoInternal(subId);
-                if (subInfo != null && !TextUtils.isEmpty(subInfo.getImsi())) {
-                    return subInfo.getImsi();
+                if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+                    SubscriptionInfoInternal subInfo = SubscriptionManagerService.getInstance()
+                            .getSubscriptionInfoInternal(subId);
+                    if (subInfo != null && !TextUtils.isEmpty(subInfo.getImsi())) {
+                        return subInfo.getImsi();
+                    }
+                    return null;
                 }
-                return null;
+                return SubscriptionController.getInstance().getImsiPrivileged(subId);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
